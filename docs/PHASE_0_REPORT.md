@@ -46,7 +46,7 @@ Se clonaron con éxito y auditaron los 8 proyectos upstream especificados. Todos
 
 ## 3. Arquitectura Creada
 
-Se estableció la estructura completa del proyecto bajo el paquete base provisional `com.jarvis.assistant`:
+Se estableció el scaffold inicial de contratos bajo el paquete base provisional `com.jarvis.assistant`:
 
 ```text
 jarvis-android/
@@ -139,7 +139,7 @@ Bajo licencias permisivas (Apache-2.0 y MIT):
 ## 7. Análisis de Riesgos
 
 1. **Licencias:** Riesgo mitigado. Dicio y DeVA están catalogados como `REFERENCE_ONLY` y aislados fuera del código productivo. Ningún archivo con copyright restrictivo ha sido transferido.
-2. **Seguridad y Privilegios:** Se neutralizó el riesgo de inyección o daño al sistema prohibiendo terminantemente herramientas de texto libre como `shell("...")` o `su("...")`. Toda operación es semántica, tipada y pasa por un `SafetyInterceptor` con evaluación de `RiskLevel`.
+2. **Seguridad y Privilegios:** El diseño prohíbe herramientas de texto libre como `shell("...")` o `su("...")`. En Fase 0 se definieron los contratos de seguridad; el despacho obligatorio mediante `SafetyInterceptor` se implementó posteriormente al iniciar la Functional Alpha.
 3. **Restricciones de Background en Android:** En Android 12+, los servicios en segundo plano tienen limitaciones severas para acceder al micrófono o lanzar Activities desde background. Esto se resolverá en la Fase 1 asumiendo formalmente el rol `ROLE_ASSISTANT` del sistema operativo, el cual otorga excepciones legítimas para invocación por voz y captura asistida.
 4. **Fragmentación de Fabricantes (OEMs - Xiaomi, Honor, Huawei, Samsung):** Capas de personalización como MagicOS o MIUI pueden sobrescribir o pausar servicios en background agresivamente. Será necesario documentar los pasos de exclusión de optimización de batería y configuración manual del Asistente Digital Predeterminado.
 

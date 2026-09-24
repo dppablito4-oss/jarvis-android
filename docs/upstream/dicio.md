@@ -21,7 +21,7 @@
 2. **`OwwModel`**
    - **Archivo:** `app/src/main/kotlin/org/stypox/dicio/io/wake/oww/OwwModel.kt`
    - **Módulo:** `:app`
-   - **Responsabilidad:** Ejecución en cascada con TensorFlow Lite (`org.tensorflow.lite.Interpreter`). Transforma un bloque de 1280 floats de audio en mel-spectrogram (76 floats), acumula ventanas en buffer FIFO, alimenta el modelo de embeddings y ejecuta el clasificador de wake word devolviendo la probabilidad (0.0 a 1.0).
+   - **Responsabilidad:** Ejecución en cascada con TensorFlow Lite (`org.tensorflow.lite.Interpreter`). En el commit auditado transforma bloques de 1152 muestras en 5 filas de 32 mel-features, acumula una ventana FIFO de 76x32, alimenta el modelo de embeddings y ejecuta el clasificador devolviendo la probabilidad (0.0 a 1.0).
 
 3. **`WakeService`**
    - **Archivo:** `app/src/main/kotlin/org/stypox/dicio/io/wake/WakeService.kt`
@@ -43,11 +43,11 @@
 ## Flujo interno
 
 1. El usuario inicia la detección continua o el sistema arranca `WakeService`.
-2. `WakeService` obtiene el micrófono vía `AudioRecord` (16 kHz, mono, PCM 16-bit) y convierte las muestras a floats normalizados `[-1.0, 1.0]`.
-3. Los chunks de 1280 muestras (80 ms) se envían a `OpenWakeWordDevice.processFrame(audio)`.
+2. `WakeService` obtiene el micrófono vía `AudioRecord` (16 kHz, mono, PCM 16-bit) y `OpenWakeWordDevice` convierte las muestras a floats normalizados `[-1.0, 1.0]`.
+3. Los chunks usados por la implementación auditada son de 1152 muestras (72 ms) y se envían a `OpenWakeWordDevice.processFrame(audio)`. Esto difiere del runtime Python upstream, que recomienda múltiplos de 1280 muestras (80 ms).
 4. `OwwModel` ejecuta en TFLite:
    - `melInterpreter`: genera espectrograma.
-   - Buffer circular de mel-features (76 x 32).
+   - Cada llamada produce 5x32 mel-features y actualiza el buffer circular de 76x32.
    - `embInterpreter`: genera embedding acústico.
    - `wakeInterpreter`: clasifica si corresponde a la palabra clave.
 5. Si el score supera el umbral configurado (ej. 0.5), se detiene el clasificador y se dispara la activación del asistente.

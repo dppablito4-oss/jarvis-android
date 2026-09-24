@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Jarvis</string>
+    <string name="accessibility_description">Permite a Jarvis observar la interfaz y ejecutar acciones aprobadas por el usuario.</string>
+</resources>

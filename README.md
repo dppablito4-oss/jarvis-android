@@ -1,6 +1,6 @@
 # Jarvis Android
 
-> **Estado actual del proyecto:** `Phase 0 — Architecture & Upstream Research`
+> **Estado actual del proyecto:** `Functional Alpha — foundation in progress`
 
 ## Vision
 
@@ -11,22 +11,23 @@ Asistente Android nativo modular diseñado para operar de forma continua (24/7) 
 ## Current Status
 
 ```text
-[ ] System Assistant
+[~] System Assistant (servicios y descriptor compilados; falta validar en dispositivo)
 [ ] Wake Word
 [ ] Voice
-[ ] OpenAI
-[ ] Tool Calling
-[ ] Accessibility
+[~] OpenAI (Responses API conectada en debug con `gpt-6-astra`)
+[~] Tool Calling (router local seguro y herramientas básicas)
+[~] Accessibility (servicio y percepción implementados; falta validar en dispositivo)
 [ ] Notifications
 [ ] Memory
 [ ] Shizuku
 [ ] Root
 
+[x] Compilable Android application
 [x] Architecture
 [x] Upstream research
 ```
 
-*Nota: Ninguna funcionalidad física del asistente está implementada ni activa todavía. La Fase 0 establece los cimientos de arquitectura, auditoría de código upstream, reglas de licencias, contratos e interfaces mínimas.*
+*Nota: La aplicación ya compila y contiene un corte vertical local. Las capacidades marcadas `[~]` requieren instalación y validación en un dispositivo; voz streaming, proveedor cloud, memoria y automatización avanzada siguen pendientes.*
 
 ---
 
@@ -34,13 +35,11 @@ Asistente Android nativo modular diseñado para operar de forma continua (24/7) 
 
 ```text
 jarvis-android/
-├── app/                  # Aplicación Android base, Application class, DI
+├── app/                  # Aplicación Android, UI Compose y servicios del sistema
 ├── assistant/            # Integración con Android System Assistant, Wake Word y Audio
 ├── agent/                # Núcleo del agente, Planificador, Tools, Contexto y Seguridad
-├── automation/           # Accesibilidad, Notificaciones, Intents, Eventos y Triggers
 ├── core/                 # Utilidades comunes, modelos base, red y logging
 ├── device/               # Abstracciones de puentes de hardware y sistema (Android, Accessibility, Shizuku, Root)
-├── memory/               # Almacenamiento local, grafo relacional y preferencias
 ├── docs/                 # Documentación técnica, arquitectura, ADRs y auditorías upstream
 │   ├── architecture/     # Visión de capas, diagramas de flujo y jerarquía de bridges
 │   ├── decisions/        # Architecture Decision Records (ADRs)
@@ -51,6 +50,9 @@ jarvis-android/
 │   └── manifest.md       # Metadatos, branches, commits y licencias de los clones
 ├── README.md             # Este documento
 ├── ROADMAP.md            # Planificación de fases de desarrollo
+├── settings.gradle.kts   # Módulos Gradle
+├── build.gradle.kts      # Plugins comunes
+├── gradlew / gradlew.bat # Wrapper reproducible
 └── .gitignore            # Configuración de exclusiones de Git
 ```
 
@@ -68,3 +70,17 @@ jarvis-android/
 8. **openai-java** (`FUTURE_DEPENDENCY`): SDK oficial de OpenAI para Fase 3 (Voz) y Fase 4 (Tools).
 
 Para más detalles, consulta [docs/upstream/COMPONENT_MAP.md](docs/upstream/COMPONENT_MAP.md) y [ROADMAP.md](ROADMAP.md).
+
+## Configuración local del proveedor
+
+Las builds `debug` pueden leer estas propiedades desde `local.properties`, archivo excluido de Git:
+
+```properties
+JARVIS_OPENAI_API_KEY=...
+JARVIS_OPENAI_MODEL=gpt-6-astra
+JARVIS_BACKGROUND_MODEL=gpt-6-luna
+```
+
+La build `release` fuerza la clave a vacío. Antes de distribuir la aplicación se reemplazará la
+autenticación directa por un backend o credenciales efímeras; una clave embebida en un APK debug
+solo es aceptable para desarrollo personal.
