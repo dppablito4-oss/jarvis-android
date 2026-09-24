@@ -26,6 +26,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -93,6 +94,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -296,6 +298,14 @@ private fun JarvisHeader(isBusy: Boolean) {
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(R.drawable.jarvis_logo),
+                    contentDescription = "Logo Jarvis",
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "J.A.R.V.I.S.",
                     color = JarvisCyan,
@@ -495,11 +505,21 @@ private fun JarvisArcReactor(
 
             // Núcleo central luminoso
             drawCircle(
-                color = Color.White,
-                radius = maxRadius * 0.18f,
+                color = Color.White.copy(alpha = 0.4f),
+                radius = maxRadius * 0.22f,
                 center = center
             )
         }
+
+        // Logo 3D en el corazón del reactor con respiración
+        Image(
+            painter = painterResource(R.drawable.jarvis_logo),
+            contentDescription = "Núcleo Jarvis",
+            modifier = Modifier
+                .size(52.dp)
+                .scale(breathScale)
+                .clip(CircleShape)
+        )
 
         // Estado del núcleo sobreimpreso al pie
         Column(
