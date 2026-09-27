@@ -21,6 +21,14 @@ interface AssistantGateway {
     suspend fun streamCompletion(
         userPrompt: String,
         conversationHistory: List<GatewayMessage>,
+        availableTools: List<ToolDefinition>,
+        previousResponseId: String? = null
+    ): Flow<GatewayEvent>
+
+    /** Continúa una respuesta después de ejecutar todas las herramientas solicitadas. */
+    suspend fun continueCompletion(
+        previousResponseId: String,
+        toolOutputs: List<GatewayToolOutput>,
         availableTools: List<ToolDefinition>
     ): Flow<GatewayEvent>
 }
@@ -37,11 +45,19 @@ sealed class GatewayEvent {
     ) : GatewayEvent()
 
     /** Finalización de la generación */
-    data class Completed(val finishReason: String) : GatewayEvent()
+    data class Completed(
+        val responseId: String,
+        val finishReason: String
+    ) : GatewayEvent()
 
     /** Error producido durante la comunicación con el proveedor */
     data class Error(val throwable: Throwable) : GatewayEvent()
 }
+
+data class GatewayToolOutput(
+    val callId: String,
+    val output: String
+)
 
 data class GatewayMessage(
     val role: MessageRole,

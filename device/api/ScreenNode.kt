@@ -13,6 +13,7 @@ data class ScreenNode(
     val packageName: String?,
     val isClickable: Boolean,
     val isEditable: Boolean,
+    val isPassword: Boolean = false,
     val isScrollable: Boolean,
     val boundsInScreen: RectBounds,
     val children: List<ScreenNode> = emptyList()

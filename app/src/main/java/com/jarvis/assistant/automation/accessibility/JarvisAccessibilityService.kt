@@ -82,6 +82,7 @@ class JarvisAccessibilityService : AccessibilityService() {
             packageName = node.packageName?.toString(),
             isClickable = node.isClickable,
             isEditable = node.isEditable,
+            isPassword = node.isPassword,
             isScrollable = node.isScrollable,
             boundsInScreen = RectBounds(bounds.left, bounds.top, bounds.right, bounds.bottom),
             children = children

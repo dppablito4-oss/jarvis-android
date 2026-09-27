@@ -11,14 +11,14 @@ Asistente Android nativo modular diseñado para operar de forma continua (24/7) 
 ## Current Status
 
 ```text
-[~] System Assistant (servicios y descriptor compilados; falta validar en dispositivo)
+[x] System Assistant (rol, sesión y overlay validados en Android 16)
 [ ] Wake Word
-[ ] Voice
-[~] OpenAI (Responses API conectada en debug con `gpt-6-astra`)
-[~] Tool Calling (router local seguro y herramientas básicas)
-[~] Accessibility (servicio y percepción implementados; falta validar en dispositivo)
+[x] Voice (modo manos libres, reconocimiento y TTS validados en dispositivo)
+[x] OpenAI (Responses API conectada con `gpt-6-astra`)
+[x] Tool Calling (ciclo completo con múltiples llamadas y resultados)
+[x] Accessibility (percepción, clic, escritura y desplazamiento habilitados)
 [ ] Notifications
-[ ] Memory
+[~] Memory (continuidad conversacional de corto plazo mediante Responses API)
 [ ] Shizuku
 [ ] Root
 
@@ -27,7 +27,7 @@ Asistente Android nativo modular diseñado para operar de forma continua (24/7) 
 [x] Upstream research
 ```
 
-*Nota: La aplicación ya compila y contiene un corte vertical local. Las capacidades marcadas `[~]` requieren instalación y validación en un dispositivo; voz streaming, proveedor cloud, memoria y automatización avanzada siguen pendientes.*
+*Nota: El corte vertical voz → agente → herramientas → respuesta hablada está validado en dispositivo. Wake word y memoria persistente de largo plazo siguen pendientes.*
 
 ---
 
@@ -73,14 +73,14 @@ Para más detalles, consulta [docs/upstream/COMPONENT_MAP.md](docs/upstream/COMP
 
 ## Configuración local del proveedor
 
-Las builds `debug` pueden leer estas propiedades desde `local.properties`, archivo excluido de Git:
+El modelo puede configurarse desde `local.properties`, archivo excluido de Git:
 
 ```properties
-JARVIS_OPENAI_API_KEY=...
 JARVIS_OPENAI_MODEL=gpt-6-astra
 JARVIS_BACKGROUND_MODEL=gpt-6-luna
 ```
 
-La build `release` fuerza la clave a vacío. Antes de distribuir la aplicación se reemplazará la
-autenticación directa por un backend o credenciales efímeras; una clave embebida en un APK debug
-solo es aceptable para desarrollo personal.
+La API key no se incorpora a ninguna variante del APK. En la aplicación toca **Motor IA**, ingresa
+la clave y guárdala: se cifra mediante Android Keystore y las copias de seguridad de datos están
+deshabilitadas. Para una distribución pública sigue siendo recomendable sustituir la clave personal
+por un backend con credenciales efímeras.

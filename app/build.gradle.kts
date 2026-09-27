@@ -40,16 +40,9 @@ android {
     }
 
     buildTypes {
-        debug {
-            buildConfigField(
-                "String",
-                "OPENAI_API_KEY",
-                quotedBuildConfig(localSetting("JARVIS_OPENAI_API_KEY"))
-            )
-        }
+        debug { }
         release {
             // Una release distribuible nunca incorpora el secreto del desarrollador.
-            buildConfigField("String", "OPENAI_API_KEY", quotedBuildConfig(""))
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -104,4 +97,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.test:core:1.7.0")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test:rules:1.7.0")
 }

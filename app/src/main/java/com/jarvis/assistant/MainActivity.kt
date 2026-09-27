@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -78,8 +79,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,11 +101,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jarvis.assistant.assistant.system.SpeechInputController
+import com.jarvis.assistant.assistant.system.TextToSpeechController
 
 // ══════════════════════════════════════════════════════════════════════
 // PALETA DE COLORES JARVIS CYBERPUNK / HIGH-TECH HUD
@@ -177,7 +183,23 @@ private fun JarvisScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val capabilities by model.capabilities.collectAsStateWithLifecycle()
     var command by remember { mutableStateOf("") }
+    var showApiKeyDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val ttsController = remember(context) { TextToSpeechController(context) }
+    val speechController = remember(context, model) {
+        SpeechInputController(context) { recognized ->
+            command = recognized
+            model.execute(recognized) { result ->
+                ttsController.speak(result.errorMessage ?: result.outputMessage)
+            }
+        }
+    }
+    DisposableEffect(speechController, ttsController) {
+        onDispose {
+            speechController.destroy()
+            ttsController.shutdown()
+        }
+    }
 
     val microphonePermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -185,6 +207,14 @@ private fun JarvisScreen(
         model.refreshCapabilities()
         val text = if (granted) "Micrófono habilitado" else "Permiso de micrófono denegado"
         Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        if (granted) speechController.startListening()
+    }
+    val requestVoiceInput = {
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            speechController.startListening()
+        } else {
+            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     Surface(
@@ -233,8 +263,9 @@ private fun JarvisScreen(
                     requestAssistantRole = requestAssistantRole,
                     openAccessibilitySettings = openAccessibilitySettings,
                     requestMicPermission = {
-                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        requestVoiceInput()
                     },
+                    configureGateway = { showApiKeyDialog = true },
                     onRefresh = { model.refreshCapabilities() }
                 )
 
@@ -258,7 +289,7 @@ private fun JarvisScreen(
                         }
                     },
                     onRequestMic = {
-                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        requestVoiceInput()
                     }
                 )
 
@@ -284,6 +315,49 @@ private fun JarvisScreen(
             }
         }
     }
+    if (showApiKeyDialog) {
+        OpenAiKeyDialog(
+            onDismiss = { showApiKeyDialog = false },
+            onSave = { key ->
+                val app = context.applicationContext as JarvisApplication
+                model.attach(app.configureOpenAiKey(key))
+                showApiKeyDialog = false
+                Toast.makeText(context, "Configuración de OpenAI actualizada", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+@Composable
+private fun OpenAiKeyDialog(
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Motor OpenAI") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("La clave se cifra con Android Keystore y no se incluye en el APK.")
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it.trim() },
+                    label = { Text("API key") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = key.isNotBlank(), onClick = { onSave(key) }) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -554,6 +628,7 @@ private fun TelemetryCapabilitiesSection(
     requestAssistantRole: () -> Unit,
     openAccessibilitySettings: () -> Unit,
     requestMicPermission: () -> Unit,
+    configureGateway: () -> Unit,
     onRefresh: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -626,7 +701,7 @@ private fun TelemetryCapabilitiesSection(
                 isActive = capabilities.hasAssistantGateway,
                 icon = Icons.Default.Psychology,
                 accentColor = if (capabilities.hasAssistantGateway) JarvisNeonPurple else JarvisElectricBlue,
-                onClick = { /* informativo */ }
+                onClick = configureGateway
             )
         }
     }

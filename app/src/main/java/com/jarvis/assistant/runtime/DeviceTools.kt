@@ -7,6 +7,7 @@ import com.jarvis.assistant.agent.tools.ToolDefinition
 import com.jarvis.assistant.agent.tools.ToolResult
 import com.jarvis.assistant.core.model.DeviceCapability
 import com.jarvis.assistant.device.api.DeviceAutomation
+import com.jarvis.assistant.device.api.ScrollDirection
 
 class OpenAppTool(private val automation: DeviceAutomation) : Tool {
     override val definition = ToolDefinition(
@@ -76,7 +77,13 @@ class InspectScreenTool(private val automation: DeviceAutomation) : Tool {
             .filter { !it.text.isNullOrBlank() || !it.contentDescription.isNullOrBlank() || it.isClickable || it.isEditable }
             .take(120)
             .joinToString("\n") { node ->
-                val label = node.text ?: node.contentDescription ?: node.className.orEmpty()
+                val label = when {
+                    node.isPassword -> "[campo de contraseña oculto]"
+                    node.isEditable -> "[campo editable oculto]"
+                    else -> sanitizeVisibleText(
+                        node.text ?: node.contentDescription ?: node.className.orEmpty()
+                    )
+                }
                 "[${node.id}] $label${if (node.isClickable) " (click)" else ""}${if (node.isEditable) " (input)" else ""}"
             }
         return ToolResult(definition.name, true, "Pantalla observada", data = mapOf("screen" to flattened))
@@ -85,5 +92,81 @@ class InspectScreenTool(private val automation: DeviceAutomation) : Tool {
     private fun flatten(node: com.jarvis.assistant.device.api.ScreenNode, target: MutableList<com.jarvis.assistant.device.api.ScreenNode>) {
         target += node
         node.children.forEach { flatten(it, target) }
+    }
+
+    private fun sanitizeVisibleText(value: String): String = value
+        .replace(EMAIL_PATTERN, "[correo oculto]")
+        .replace(LONG_NUMBER_PATTERN, "[número sensible oculto]")
+
+    private companion object {
+        val EMAIL_PATTERN = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
+        val LONG_NUMBER_PATTERN = Regex("(?<!\\d)\\d(?:[ -]?\\d){7,}(?!\\d)")
+    }
+}
+
+class ClickNodeTool(private val automation: DeviceAutomation) : Tool {
+    override val definition = ToolDefinition(
+        name = "click_node",
+        description = "Pulsa un elemento visible usando el ID obtenido por inspect_screen",
+        parametersSchemaJson = """{"type":"object","properties":{"nodeId":{"type":"integer"}},"required":["nodeId"]}""",
+        safetyMetadata = ToolSafetyMetadata(
+            riskLevel = RiskLevel.MEDIUM,
+            requiresConfirmation = false,
+            requiredCapability = DeviceCapability.ACCESSIBILITY
+        )
+    )
+
+    override suspend fun execute(arguments: Map<String, Any?>): ToolResult {
+        val nodeId = (arguments["nodeId"] as? Number)?.toInt()
+            ?: return ToolResult(definition.name, false, "Falta nodeId")
+        val success = automation.click(nodeId)
+        return ToolResult(definition.name, success, if (success) "Elemento pulsado" else "No se pudo pulsar el elemento")
+    }
+}
+
+class TypeTextTool(private val automation: DeviceAutomation) : Tool {
+    override val definition = ToolDefinition(
+        name = "type_text",
+        description = "Escribe texto en un campo editable usando su ID de inspect_screen",
+        parametersSchemaJson = """{"type":"object","properties":{"nodeId":{"type":"integer"},"text":{"type":"string"}},"required":["nodeId","text"]}""",
+        safetyMetadata = ToolSafetyMetadata(
+            riskLevel = RiskLevel.MEDIUM,
+            requiresConfirmation = false,
+            requiredCapability = DeviceCapability.ACCESSIBILITY
+        )
+    )
+
+    override suspend fun execute(arguments: Map<String, Any?>): ToolResult {
+        val nodeId = (arguments["nodeId"] as? Number)?.toInt()
+            ?: return ToolResult(definition.name, false, "Falta nodeId")
+        val text = arguments["text"] as? String
+            ?: return ToolResult(definition.name, false, "Falta text")
+        val success = automation.typeText(nodeId, text)
+        return ToolResult(definition.name, success, if (success) "Texto escrito" else "No se pudo escribir el texto")
+    }
+}
+
+class ScrollScreenTool(private val automation: DeviceAutomation) : Tool {
+    override val definition = ToolDefinition(
+        name = "scroll_screen",
+        description = "Desplaza la interfaz visible en una dirección",
+        parametersSchemaJson = """{"type":"object","properties":{"direction":{"type":"string","enum":["up","down","left","right"]}},"required":["direction"]}""",
+        safetyMetadata = ToolSafetyMetadata(
+            riskLevel = RiskLevel.LOW,
+            requiresConfirmation = false,
+            requiredCapability = DeviceCapability.ACCESSIBILITY
+        )
+    )
+
+    override suspend fun execute(arguments: Map<String, Any?>): ToolResult {
+        val direction = when ((arguments["direction"] as? String)?.lowercase()) {
+            "up" -> ScrollDirection.UP
+            "down" -> ScrollDirection.DOWN
+            "left" -> ScrollDirection.LEFT
+            "right" -> ScrollDirection.RIGHT
+            else -> return ToolResult(definition.name, false, "Dirección inválida")
+        }
+        val success = automation.scroll(direction)
+        return ToolResult(definition.name, success, if (success) "Pantalla desplazada" else "No se pudo desplazar")
     }
 }

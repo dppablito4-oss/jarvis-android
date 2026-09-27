@@ -7,6 +7,7 @@ import com.openai.client.okhttp.OpenAIOkHttpClient
 import com.openai.core.JsonValue
 import com.openai.models.responses.FunctionTool
 import com.openai.models.responses.ResponseCreateParams
+import com.openai.models.responses.ResponseInputItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -30,7 +31,8 @@ class OpenAiAssistantGateway(
     override suspend fun streamCompletion(
         userPrompt: String,
         conversationHistory: List<GatewayMessage>,
-        availableTools: List<com.jarvis.assistant.agent.tools.ToolDefinition>
+        availableTools: List<com.jarvis.assistant.agent.tools.ToolDefinition>,
+        previousResponseId: String?
     ): Flow<GatewayEvent> = flow {
         val contextualInput = buildString {
             conversationHistory.takeLast(12).forEach { message ->
@@ -43,10 +45,42 @@ class OpenAiAssistantGateway(
             .instructions(SYSTEM_INSTRUCTIONS)
             .input(contextualInput)
             .maxOutputTokens(2_048)
+        previousResponseId?.let(builder::previousResponseId)
 
         availableTools.forEach { builder.addTool(it.toFunctionTool()) }
 
-        val response = client.responses().create(builder.build())
+        emitResponse(client.responses().create(builder.build()))
+    }.catch { throwable -> emit(GatewayEvent.Error(throwable)) }
+        .flowOn(Dispatchers.IO)
+
+    override suspend fun continueCompletion(
+        previousResponseId: String,
+        toolOutputs: List<GatewayToolOutput>,
+        availableTools: List<com.jarvis.assistant.agent.tools.ToolDefinition>
+    ): Flow<GatewayEvent> = flow {
+        require(toolOutputs.isNotEmpty()) { "Debe existir al menos un resultado de herramienta" }
+        val input = toolOutputs.map { result ->
+            ResponseInputItem.ofFunctionCallOutput(
+                ResponseInputItem.FunctionCallOutput.builder()
+                    .callId(result.callId)
+                    .output(result.output)
+                    .build()
+            )
+        }
+        val builder = ResponseCreateParams.builder()
+            .model(model)
+            .instructions(SYSTEM_INSTRUCTIONS)
+            .previousResponseId(previousResponseId)
+            .inputOfResponse(input)
+            .maxOutputTokens(2_048)
+        availableTools.forEach { builder.addTool(it.toFunctionTool()) }
+        emitResponse(client.responses().create(builder.build()))
+    }.catch { throwable -> emit(GatewayEvent.Error(throwable)) }
+        .flowOn(Dispatchers.IO)
+
+    private suspend fun kotlinx.coroutines.flow.FlowCollector<GatewayEvent>.emitResponse(
+        response: com.openai.models.responses.Response
+    ) {
         var emittedText = false
         response.output().forEach { item ->
             if (item.isFunctionCall()) {
@@ -68,9 +102,13 @@ class OpenAiAssistantGateway(
                 }
             }
         }
-        emit(GatewayEvent.Completed(if (emittedText) "completed" else "tool_call"))
-    }.catch { throwable -> emit(GatewayEvent.Error(throwable)) }
-        .flowOn(Dispatchers.IO)
+        emit(
+            GatewayEvent.Completed(
+                responseId = response.id(),
+                finishReason = if (emittedText) "completed" else "tool_call"
+            )
+        )
+    }
 
     private fun com.jarvis.assistant.agent.tools.ToolDefinition.toFunctionTool(): FunctionTool {
         val schema: Map<String, Any?> = mapper.readValue(
@@ -94,9 +132,14 @@ class OpenAiAssistantGateway(
         private const val SYSTEM_INSTRUCTIONS = """
             Eres Jarvis, un agente Android orientado a completar objetivos verificables.
             Usa herramientas cuando una acción física sea necesaria. Nunca inventes que una acción
-            ocurrió. Prefiere la operación de menor privilegio y solicita confirmación para acciones
-            sensibles. Si recibes una observación de pantalla, razona únicamente sobre elementos
-            presentes. Responde en el idioma del usuario y de forma concisa.
+            ocurrió. Prefiere la operación de menor privilegio. Una orden directa del usuario ya
+            autoriza sus pasos rutinarios: ejecútala sin pedir confirmación adicional. Conserva los
+            datos dados en turnos anteriores; si el usuario completa un dato faltante, combínalo con
+            el objetivo pendiente en vez de volver a preguntarlo. Haz una sola pregunta breve solo
+            cuando falte un dato imprescindible. Para operar interfaces, inspecciona la pantalla,
+            usa los IDs visibles y verifica el resultado. Si recibes una observación de pantalla,
+            razona únicamente sobre elementos presentes. Responde en el idioma del usuario y de
+            forma concisa, ideal para ser leída mediante TTS.
         """
     }
 }

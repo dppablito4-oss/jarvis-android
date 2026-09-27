@@ -53,6 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +67,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +87,8 @@ import com.jarvis.assistant.JarvisApplication
 import com.jarvis.assistant.R
 import com.jarvis.assistant.runtime.JarvisRuntime
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicReference
 
 private val SessionCyan = Color(0xFF00E5FF)
 private val SessionElectricBlue = Color(0xFF2979FF)
@@ -164,7 +168,44 @@ internal fun JarvisAssistantOverlay(
 ) {
     val state = runtime?.state?.collectAsState()?.value
     var command by remember { mutableStateOf("") }
+    var handsFree by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val localContext = LocalContext.current
+    val ttsController = remember(localContext) { TextToSpeechController(localContext) }
+    val speechReference = remember { AtomicReference<SpeechInputController>() }
+    val speechController = remember(localContext, runtime) {
+        SpeechInputController(
+            context = localContext,
+            onFinalText = { recognized ->
+                command = recognized
+                scope.launch {
+                    val result = runtime?.execute(recognized)
+                    val response = result?.errorMessage ?: result?.outputMessage ?: "Motor no disponible"
+                    ttsController.speak(response) {
+                        if (handsFree) speechReference.get()?.startListening()
+                    }
+                }
+            },
+            onListeningError = {
+                if (handsFree) {
+                    scope.launch {
+                        delay(600)
+                        if (handsFree) speechReference.get()?.startListening()
+                    }
+                }
+            }
+        )
+    }
+    speechReference.set(speechController)
+    val speechState = speechController.state.collectAsState().value
+    val ttsState = ttsController.state.collectAsState().value
+    DisposableEffect(speechController, ttsController) {
+        onDispose {
+            handsFree = false
+            speechController.destroy()
+            ttsController.shutdown()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -289,11 +330,14 @@ internal fun JarvisAssistantOverlay(
             }
 
             // Visualizador de ondas de audio (Soundwave)
-            SoundwaveVisualizer(isBusy = state?.isBusy == true)
+            SoundwaveVisualizer(isBusy = state?.isBusy == true || speechState.isListening || ttsState.isSpeaking)
 
             // Indicador de estado
             Text(
                 text = when {
+                    speechState.isListening -> "Escuchando..."
+                    ttsState.isSpeaking -> "Respondiendo por voz..."
+                    speechState.error != null -> speechState.error
                     state?.isBusy == true -> "Procesando directiva cognitiva..."
                     state?.lastMessage?.isNotBlank() == true && state.lastMessage != "Listo" ->
                         state.lastMessage
@@ -314,28 +358,28 @@ internal fun JarvisAssistantOverlay(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AssistantChip("🔍 ¿Qué hay en pantalla?") {
+                AssistantChip("🔍 ¿Qué hay en pantalla?", state?.isBusy != true) {
                     scope.launch { runtime?.execute("inspecciona pantalla") }
                 }
-                AssistantChip("🏠 Ir a Inicio") {
+                AssistantChip("🏠 Ir a Inicio", state?.isBusy != true) {
                     scope.launch {
                         runtime?.execute("inicio")
                         onDismiss()
                     }
                 }
-                AssistantChip("🔙 Volver Atrás") {
+                AssistantChip("🔙 Volver Atrás", state?.isBusy != true) {
                     scope.launch {
                         runtime?.execute("atrás")
                         onDismiss()
                     }
                 }
-                AssistantChip("📑 Apps Recientes") {
+                AssistantChip("📑 Apps Recientes", state?.isBusy != true) {
                     scope.launch {
                         runtime?.execute("recientes")
                         onDismiss()
                     }
                 }
-                AssistantChip("🎵 Abrir Spotify") {
+                AssistantChip("🎵 Abrir Spotify", state?.isBusy != true) {
                     scope.launch {
                         runtime?.execute("abre spotify")
                         onDismiss()
@@ -401,16 +445,23 @@ internal fun JarvisAssistantOverlay(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF0F223D))
+                                .background(if (handsFree) SessionCyan.copy(alpha = 0.25f) else Color(0xFF0F223D))
                                 .border(1.dp, SessionCyan.copy(alpha = 0.35f), CircleShape)
-                                .clickable {
-                                    scope.launch { runtime?.execute("inspecciona pantalla") }
+                                .clickable(enabled = handsFree || state?.isBusy != true) {
+                                    handsFree = !handsFree
+                                    if (handsFree) {
+                                        ttsController.stop()
+                                        speechController.startListening()
+                                    } else {
+                                        speechController.cancel()
+                                        ttsController.stop()
+                                    }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Mic,
-                                contentDescription = "Micrófono",
+                                contentDescription = if (handsFree) "Desactivar modo manos libres" else "Activar modo manos libres",
                                 tint = SessionCyan,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -558,6 +609,7 @@ private fun SoundwaveVisualizer(isBusy: Boolean) {
 @Composable
 private fun AssistantChip(
     label: String,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
     Box(
@@ -565,12 +617,12 @@ private fun AssistantChip(
             .clip(RoundedCornerShape(16.dp))
             .background(Color(0xFF0C192E))
             .border(1.dp, SessionCyan.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(
             text = label,
-            color = SessionCyan,
+            color = if (enabled) SessionCyan else SessionTextMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium
         )
